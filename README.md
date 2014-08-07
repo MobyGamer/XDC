@@ -12,5 +12,8 @@ on purpose so that timing compiled code could be done directly on the target
 hardware.  It was found during development that careful measurement and
 calculation could achieve >95% accuracy, but it was too close to a competition
 deadline to rewrite quickly, so here it is.  You can run it in DOSBox or a
-virtual session (ie. Windows XP in VirtualBox) without any trouble, with some
-limitations such as 8.3 filenames required.
+virtual session (ie. Windows XP in VirtualBox) without any trouble, albeit with
+some DOS-era limitations such as required 8.3 filenames.
+
+Compiling the code requires some files from my \UNITS repository, so grab that
+as well.
