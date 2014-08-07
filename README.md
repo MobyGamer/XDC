@@ -15,5 +15,5 @@ deadline to rewrite quickly, so here it is.  You can run it in DOSBox or a
 virtual session (ie. Windows XP in VirtualBox) without any trouble, albeit with
 some DOS-era limitations such as required 8.3 filenames.
 
-Compiling the code requires some files from my \UNITS repository, so grab that
-as well.
+Compiling the code as-is requires Turbo Pascal 7.0 as well as some files from 
+my UNITS github repository.
