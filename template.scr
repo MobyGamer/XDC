@@ -1,3 +1,5 @@
+# This is a template script file that illustrates the minimum necessary
+# directives to create a video using XDC.
 screenmode=1
 sourcefps=23.976
 waveinput=source\to\file.wav
