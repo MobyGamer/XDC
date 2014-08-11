@@ -318,7 +318,7 @@ begin
   header1:=picbuf;
   {Valid bitmap file?}
   if header1^.filetype<>$4d42 {"BM" little-endian}
-    then fatalerr('Not a Windows bitmap file?');
+    then fatalerr(s+' not a Windows bitmap file?');
   if header1^.filesize > maxbuf
     then fatalerr('Bitmap file too large for us to process');
   {now start checking out secondary header}
@@ -326,7 +326,7 @@ begin
   inc(word(header2),14);
   {look for more error conditions}
   if header2^.headersize<>40
-    then fatalerr('Not a Windows bitmap file?');
+    then fatalerr(s+' not a Windows bitmap file?');
   if header2^.compMethod<>0
     then fatalerr('Bitmap must be uncompressed; this bitmap uses method '+inttostr(header2^.compMethod));
 
@@ -1239,6 +1239,10 @@ begin
       deltas^.FreeAll;
     end;
     if keypressed then if readkeychar=#27 then break;
+    if numEncodedFrames>=$FFFF then begin
+      stderr('File format only supports 65535 frames; finishing encoding');
+      break;
+    end;
   end;
   close(inscript);
 end;
