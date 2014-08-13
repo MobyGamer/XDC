@@ -1243,14 +1243,18 @@ begin
     move(CGARAM^,prevFrame^,screenRAMSize);
     {logic error detection:  If we had N deltas before encoding+saving, and
     for some reason still have N deltas afterwards, then the delta list
-    is invalid and must be jettisoned.  This can occur if the optimization
-    combination phase creates a delta that is too large for our cycle
-    pool.  This should "never" happen, but does in extremely rare cases
-    due to a cycle/byte pool calc bug I can't quite seem to find...}
+    is invalid and we must do something about it.
+    This should never occur, but some edge cases where the bitrate is set
+    way too low can create "oversize" deltas during the optimization
+    combination phase, where a delta is too large for the remaining cycle pool.
+    The quickest way to deal with this is to subdivide our deltas.}
     if (oldDCount=deltas^.count) and (oldDCount<>0) then begin
-      stderr('Delta list of size '+inttostr(oldDCount)+' has only invalid deltas!');
-      stderr('Jettisoning delta list!');
-      deltas^.FreeAll;
+      stderr('Delta list of size '+inttostr(oldDCount)+' contains only invalid deltas:');
+      deltas^.dumpAll;
+      stderr('Subdividing '+inttostr(deltas^.count)+' deltas to compensate...');
+      deltas^.splitAll;
+      stderr('Delta list now contains '+inttostr(deltas^.count)+' deltas:');
+      deltas^.dumpAll;
     end;
     if keypressed then if readkeychar=#27 then break;
     if numEncodedFrames>=$FFFF then begin

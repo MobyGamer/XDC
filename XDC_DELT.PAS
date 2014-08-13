@@ -43,6 +43,7 @@ type
     function GetCycles:real; {returns entire list in estimated REP cycles}
     (* function GetEncodedBytes:word; {returns entire list in estimated REP cycles} *)
     function DumpAll:word;
+    procedure SplitAll; {splits every delta in two; used for error recovery}
   end;
 
   {This structure used only for temporary management of deltas in the
@@ -205,17 +206,27 @@ begin
                   else Compare := 0;
 end;
 
-function deltaInfo(d:pdelta):string;
+Procedure TDeltas.SplitAll;
+{Edge cases exist where the simplest recovery option is to just split
+every delta into two parts of equal sizes.  This method does that quickly by
+taking advantage of the fact that the list is sorted by size, with largest
+at the top.  In a single iteration from the bottom of the list to the top,
+each delta is subdivided.  Newer, smaller deltas created by splits are
+ignored due to the nature of the foreach counting down.}
 var
-  s:string;
+  w,blen:word;
+  dtmp,dsplit1,dsplit2:pDelta;
 begin
-  s:=' delta info: ';
-  s:=s+hexword(d^.startofs)+'-'+hexword(d^.endofs)+':'+intpadded(d^.blength,5,#32);
-  s:=s+' cost: '+realtostr(d^.REPcycleCost);
-  if d^.dtype=run then s:=s+', run of '+hex(d^.fillvalue);
-  if debug>2 then if d^.blength=1 then s:=s+', # changed pixels '+inttostr(d^.numPixelsChanged);
-  if d^.frozen then s:=s+' (FROZEN)';
-  deltaInfo:=s;
+  for w:=Count-1 downto 0 do begin
+    dtmp:=at(w);
+    if dtmp^.blength<2 then continue; {can't split a 1-byte delta!}
+    blen:=dtmp^.blength div 2;
+    dsplit1:=new(pdelta,init(dtmp^.startofs,dtmp^.startofs+blen));
+    dsplit2:=new(pdelta,init(dtmp^.startofs+blen+1,dtmp^.endofs));
+    insert(dsplit1);
+    insert(dsplit2);
+    free(dtmp);
+  end;
 end;
 
 Function TDeltas.GetSize;
@@ -279,6 +290,21 @@ begin
       then Compare := 1
       else Compare := 0;
 end;
+
+function deltaInfo(d:pdelta):string;
+var
+  s:string;
+begin
+  s:=' delta info: ';
+  s:=s+hexword(d^.startofs)+'-'+hexword(d^.endofs)+':'+intpadded(d^.blength,5,#32);
+  s:=s+' cost: '+realtostr(d^.REPcycleCost);
+  if d^.dtype=run then s:=s+', run of '+hex(d^.fillvalue);
+  if debug>2 then if d^.blength=1 then s:=s+', # changed pixels '+inttostr(d^.numPixelsChanged);
+  if d^.frozen then s:=s+' (FROZEN)';
+  deltaInfo:=s;
+end;
+
+
 
 (*
 Function TDeltas.GetEncodedBytes;
