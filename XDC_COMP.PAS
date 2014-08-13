@@ -1,6 +1,11 @@
 program xdc_comp;
 {$I+}
 
+{todo:
+- fix the need to jettison the list
+}
+
+
 {
 "xdc" (x86 differential compiler) animation compiler for 8088+CGA systems.
 The basic operation of the animation system is to determine differences
@@ -91,7 +96,7 @@ combinedeltas=xxx        enables/disables delta combination (slow!)
 ...anything else (like filename.ext) will be interpreted as a frame to load.
 
 The above is not a complete description of the script directives; consult
-the official documentation for the full list.
+the official documentation at x86dc.wordpress.com for the full list.
 
 }
 
@@ -112,6 +117,8 @@ const
   totalEncodedBytes:longint=0;
   maxEncodedBytes:longint=0;
   numEncodedFrames:longint=0;
+  numEncodedRuns:longint=0;
+  numEncodedSlices:longint=0;
   numUniqueFrames:longint=0;
   leastCyclesRemaining:longint=$FFFFFFF;
 
@@ -201,6 +208,10 @@ begin
     +inttostr(numEncodedFrames)+' frames');
   if numEncodedFrames<>0 then stdout('('+inttostr(numUniqueFrames)+' unique frames; effective framerate: '
     +realtostr((numUniqueFrames/numEncodedFrames) * sourcefps)+' fps) (source was '+realtostr(sourcefps)+')');
+  stdout('Distribution of screen changes:');
+  l:=numEncodedRuns+numEncodedSlices;
+  stdout('  '+realtostr((numEncodedSlices / l) * 100)+'% slices');
+  stdout('  '+realtostr((numEncodedRuns / l) * 100)+'% runs');
   stdout('Total compiled size: '+inttostr(totalEncodedBytes));
   if totalDumpedBytes<>0 then begin
     avgvid:=totalEncodedBytes div numEncodedFrames;
@@ -524,12 +535,12 @@ var
     end;
     cyclePool:=cyclePool-et.totalCycles;
     bytePool:=bytePool-et.totalBytes;
+    if (cyclepool<0) or (bytepool<0)
+      then fatalerr('Pools overcommitted; bug in calculations?');
     if debug>2
       then stdout('Committed '+deltainfo(pd)
       +', cycle pool now '+realtostr(cyclepool)
       +', byte pool now '+inttostr(bytepool));
-    if (cyclepool<0) or (bytepool<0)
-      then fatalerr('Pools overcommitted; bug in calculations?');
     {maintain info variables}
     if leastCyclesRemaining>round(cyclePool)
       then leastCyclesRemaining:=round(cyclePool);
@@ -537,6 +548,9 @@ var
       then maxEncodedBytes:=maxVChunk-bytepool;
     inc(totalDumpedBytes,pd^.blength);
     inc(totalDumpedDeltas);
+    if pd^.dtype=slice
+      then inc(numEncodedSlices)
+      else inc(numEncodedRuns);
     deltas^.free(pd);
   end;
 
