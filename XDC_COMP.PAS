@@ -1,11 +1,6 @@
 program xdc_comp;
 {$I+}
 
-{todo:
-- fix the need to jettison the list
-}
-
-
 {
 "xdc" (x86 differential compiler) animation compiler for 8088+CGA systems.
 The basic operation of the animation system is to determine differences
@@ -1257,7 +1252,7 @@ begin
       deltas^.dumpAll;
     end;
     if keypressed then if readkeychar=#27 then break;
-    if numEncodedFrames>=$FFFF then begin
+    if numEncodedFrames>=maxbuf-1 then begin
       stderr('File format only supports 65535 frames; finishing encoding');
       break;
     end;
