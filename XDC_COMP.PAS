@@ -1168,11 +1168,11 @@ begin
       end;
       if key='SCREENMODE' then begin
         {1=160x200x16   2=640x200x2  (more to follow?)}
-        if (value[1]='1') or (value[1]='2') then begin
+        if value[1] in ['1'..'3'] then begin
           foundKeyPair:=true;
           screenmode:=strtoint(value[1]);
           xdc_setvid(screenmode);
-          if screenmode=1 then pixelBitDepth:=4;
+          if screenmode in [1,3] then pixelBitDepth:=4;
         end;
       end;
       if key='DEBUG' then begin
