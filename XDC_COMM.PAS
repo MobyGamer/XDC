@@ -19,7 +19,7 @@ begin
     int 10h
   end;
   case b of
-    2:asm
+    1:asm
       {turn on colorburst}
       mov dx,m6845_mode_ctl
       mov al,c_videosignal_enable+c_graphics_enable+c_640x200_enable
