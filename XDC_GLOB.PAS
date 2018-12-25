@@ -135,12 +135,19 @@ const
   playback is not feasible if we exceed this, even with XT-IDE/CF/DMA cards}
 
   screenmode:byte=0;
+{$IFDEF HP95LX}
+  screenbytewidth:byte=30;
+  screenbyteheight:byte=128;
+  screenRAMsize:word=4096;
+  maxVChunk:longint=2000;
+{$ELSE}
   screenbytewidth:byte=80;
   screenbyteheight:byte=200;
   screenRAMsize:word=16384;   {to account for extra junk between interlaced
                               banks, although can be overridden if I ever
                               decide to support tweakmodes}
   maxVChunk:longint=8000;     {maximum # of bytes to write to disk as a frame}
+{$ENDIF}
 
 type
   XDVheader=record

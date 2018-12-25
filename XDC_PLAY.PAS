@@ -69,6 +69,12 @@ begin
   inc(cpuUsageTicks);
 end;
 
+procedure userTickHandler95LX; interrupt;
+begin
+  inc(cpuUsageTicks);
+  play.callproc;
+end;
+
 Procedure PrintHelp;
 begin
   asm
@@ -189,6 +195,7 @@ begin
     if play.activeblock = 2 {If in one half, advance to the second half}
       then inc(word(sndbufp),header.achunksize);
   end;
+{$IFNDEF HP95LX}
   {if requested, display a blinking pip onscreen showing queue depth}
   if showpip then asm
     mov     ax,$b800
@@ -200,6 +207,7 @@ begin
     or      ax,1000000000000001b
     stosw
   end;
+{$ENDIF}
   if AVRing.isEmpty then begin
     if dataQueued then inc(numPauses);
     dataQueued:=false;
@@ -361,16 +369,31 @@ begin
   SetTimerHz(@noSoundIntCaller, intfps); {set to fire at video's rough framerate}
 end;
 
+procedure primeNoCard95LX;
+begin
+  play.callproc := soundIntCallerCGA;
+  SetIntVec($1C,@userTickHandler95LX);
+end;
+
 Procedure shutItDown;
 begin
   SetIntVec($01C,Int1CSave); {stop counting ticks}
+{$IFDEF HP95LX}
+  if not quiet
+    then exitplay; {shutdown Sound Blaster}
+{$ELSE}
   if quiet
     then CleanUpTimer {stop our internal "sound" handler}
     else exitplay; {shutdown Sound Blaster}
+{$ENDIF}
 
   if not presenting then begin
     asm
+{$IFDEF HP95LX}
+      mov ax,7
+{$ELSE}
       mov ax,3
+{$ENDIF}
       int 10h
     end;
     asm
@@ -403,7 +426,11 @@ end;
 begin
   prepPlayer;
   if quiet
+{$IFDEF HP95LX}
+    then primeNoCard95LX
+{$ELSE}
     then primeNoCard
+{$ENDIF}
     else primeSoundcard;
   xdc_setvid(header.vidmode);
   {if not presenting then writeln('Performing initial buffering...');}
