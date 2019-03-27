@@ -169,7 +169,11 @@ begin
   optimizations and assumptions will break the code.}
   if (word(nextframe)<>0) or (word(prevframe)<>0)
     then fatalerr('frame pointers not normalized');
+{$IFDEF HP95LX}
+  CGARAM:=ptr($b000,0);
+{$ELSE}
   CGARAM:=ptr($b800,0);
+{$ENDIF}
 
   {initialize our delta data structure and allow duplicates}
   deltas:=New(PDeltas,Init(1024,32));
@@ -420,6 +424,45 @@ begin
           sl:=addptr(sl,src_slwidth);
           destbank0:=subptr(destbank0,dst_slwidth);
         end;
+      end;
+    end;
+    240:begin
+      {make sure this is a 240x128 pic with 1-bit pixels}
+      if header2^.bitsPerPixel<>1
+        then fatalerr('240x128 bitmap uses '+inttostr(header2^.bitsPerPixel)+'-bit pixels; need 1-bit');
+      if header2^.heightInPixels<>128
+        then fatalerr('240x bitmap has '+inttostr(header2^.heightInPixels)+' lines; need 128');
+      if header2^.rawsize<>4096
+        then fatalerr('Bitmap is too large for 95LX; size='+inttostr(header2^.rawsize));
+      sl:=pointer(header2);
+      inc(word(sl),40); {skip second header}
+      move(sl^,lp,4);
+      inc(word(sl),header2^.numColors*4); {skip palette N entries in RGBA format}
+      destbank0:=nextFrame;
+      src_slwidth:=32;
+      dst_slwidth:=screenbytewidth;
+      destbank0:=addptr(destbank0,3840-dst_slwidth);
+      for w:=0 to screenbyteheight-1 do begin
+        move(sl^,destbank0^,dst_slwidth);
+        sl:=addptr(sl,src_slwidth);
+        destbank0:=subptr(destbank0,dst_slwidth);
+      end;
+      if lp=0 then asm { LCD is the inverse of CRT }
+        les     di,nextFrame
+        mov     cx,screenRAMsize
+        shr     cx,1
+        push    ds
+        push    es
+        pop     ds
+        mov     si,di
+
+      @loopit:
+        lodsw
+        xor     ax,$FFFF
+        stosw
+        loop    @loopit
+
+        pop     ds
       end;
     end;
   else
@@ -963,6 +1006,13 @@ begin
   pw:=combinedBuf;
   inc(word(pw),4);
   pw^:=opcodeBufSize;
+  {perform fixup on where video memory is}
+{$IFDEF HP95LX}
+  if screenmode = 4 then begin
+    inc(word(pw),3);
+    pw^:=$b000;
+  end;
+{$ENDIF}
   {write packet to file (no audio) or output stream (if audio)}
   if not muxing then begin
     assign(outf,fname);
@@ -1085,7 +1135,7 @@ begin
           fillchar(filler,sizeof(filler),0);
           signature[0]:='X'; signature[1]:='D'; signature[2]:='C'; signature[3]:='V';
           vidmode:=screenmode;
-          numbcols:=80; numprows:=200; features:=0;
+          numbcols:=screenbytewidth; numprows:=screenbyteheight; features:=0;
         end;
         {this is SUPERLAME and we will replace with a real WAV reader someday}
         seek(wavf,24);
@@ -1168,7 +1218,7 @@ begin
       end;
       if key='SCREENMODE' then begin
         {1=160x200x16   2=640x200x2  (more to follow?)}
-        if value[1] in ['1'..'3'] then begin
+        if value[1] in ['1'..'4'] then begin
           foundKeyPair:=true;
           screenmode:=strtoint(value[1]);
           xdc_setvid(screenmode);
