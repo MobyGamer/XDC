@@ -324,149 +324,159 @@ begin
   picbuf:=memAllocSeg(fs);
   blockread(f,picbuf^,fs,w);
   close(f);
-  {start trying to make sense of the .bmp}
-  header1:=picbuf;
-  {Valid bitmap file?}
-  if header1^.filetype<>$4d42 {"BM" little-endian}
-    then fatalerr(s+' not a Windows bitmap file?');
-  if header1^.filesize > maxbuf
-    then fatalerr('Bitmap file too large for us to process');
-  {now start checking out secondary header}
-  header2:=pbmhead2(header1);
-  inc(word(header2),14);
-  {look for more error conditions}
-  if header2^.headersize<>40
-    then fatalerr(s+' not a Windows bitmap file?');
-  if header2^.compMethod<>0
-    then fatalerr('Bitmap must be uncompressed; this bitmap uses method '+inttostr(header2^.compMethod));
+  {Is this a CGADUMP file produced by cgaart?  If so, process, otherwise
+  try to load a windows .BMP bitmap file.}
+  if (pos('.cga',s)<>0) or (pos('.CGA',s)<>0) then begin
+    sl:=picbuf;
+    inc(longint(sl),16252-16192-2);
+    move(sl^,nextframe^,16192);
+  end else begin
 
-  case header2^.widthInPixels of
-    640:begin
-      {make sure this is a 640x200 pic with 1-bit pixels}
-      if header2^.bitsPerPixel<>1
-        then fatalerr('640x200 bitmap uses '+inttostr(header2^.bitsPerPixel)+'-bit pixels; need 1-bit');
-      if header2^.heightInPixels<>200
-        then fatalerr('640x bitmap has '+inttostr(header2^.heightInPixels)+' lines; need 200');
-      if header2^.rawsize<>16000
-        then fatalerr('Bitmap is too large for CGA; size='+inttostr(header2^.rawsize));
-      sl:=pointer(header2);
-      inc(word(sl),40); {skip second header}
-      move(sl^,lp,4);
-      inc(word(sl),header2^.numColors*4); {skip palette N entries in RGBA format}
-      destbank0:=nextFrame;
-      destbank1:=nextFrame;
-      destbank1:=addptr(destbank1,8192);
-      src_slwidth:=header2^.widthInPixels div (8 div header2^.bitsPerPixel);
-      dst_slwidth:=src_slwidth;
-      destbank0:=addptr(destbank0,8000-dst_slwidth);
-      destbank1:=addptr(destbank1,8000-dst_slwidth);
-      for w:=0 to 100-1 do begin
-        move(sl^,destbank1^,dst_slwidth);
-        sl:=addptr(sl,src_slwidth);
-        destbank1:=subptr(destbank1,dst_slwidth);
+    {start trying to make sense of the .bmp}
+    header1:=picbuf;
+    {Valid bitmap file?}
+    if header1^.filetype<>$4d42 {"BM" little-endian}
+      then fatalerr(s+' not a Windows bitmap file?');
+    if header1^.filesize > maxbuf
+      then fatalerr('Bitmap file too large for us to process');
+    {now start checking out secondary header}
+    header2:=pbmhead2(header1);
+    inc(word(header2),14);
+    {look for more error conditions}
+    if header2^.headersize<>40
+      then fatalerr(s+' not a Windows bitmap file?');
+    if header2^.compMethod<>0
+      then fatalerr('Bitmap must be uncompressed; this bitmap uses method '+inttostr(header2^.compMethod));
 
-        move(sl^,destbank0^,dst_slwidth);
-        sl:=addptr(sl,src_slwidth);
-        destbank0:=subptr(destbank0,dst_slwidth);
-      end;
-      {different programs create B&W files differently -- we are assuming
-      palette is 0,0,0 then 255,255,255.  If B&W palette is actually swapped,
-      swap the bits in the buffer:}
-      if lp<>0 then asm
-        les     di,nextFrame
-        mov     cx,screenRAMsize
-        shr     cx,1
-        push    ds
-        push    es
-        pop     ds
-        mov     si,di
+    case header2^.widthInPixels of
+      640:begin
+        {make sure this is a 640x200 pic with 1-bit pixels}
+        if header2^.bitsPerPixel<>1
+          then fatalerr('640x200 bitmap uses '+inttostr(header2^.bitsPerPixel)+'-bit pixels; need 1-bit');
+        if header2^.heightInPixels<>200
+          then fatalerr('640x bitmap has '+inttostr(header2^.heightInPixels)+' lines; need 200');
+        if header2^.rawsize<>16000
+          then fatalerr('Bitmap is too large for CGA; size='+inttostr(header2^.rawsize));
+        sl:=pointer(header2);
+        inc(word(sl),40); {skip second header}
+        move(sl^,lp,4);
+        inc(word(sl),header2^.numColors*4); {skip palette N entries in RGBA format}
+        destbank0:=nextFrame;
+        destbank1:=nextFrame;
+        destbank1:=addptr(destbank1,8192);
+        src_slwidth:=header2^.widthInPixels div (8 div header2^.bitsPerPixel);
+        dst_slwidth:=src_slwidth;
+        destbank0:=addptr(destbank0,8000-dst_slwidth);
+        destbank1:=addptr(destbank1,8000-dst_slwidth);
+        for w:=0 to 100-1 do begin
+          move(sl^,destbank1^,dst_slwidth);
+          sl:=addptr(sl,src_slwidth);
+          destbank1:=subptr(destbank1,dst_slwidth);
 
-      @loopit:
-        lodsw
-        xor     ax,$FFFF
-        stosw
-        loop    @loopit
-
-        pop     ds
-      end;
-    end;
-    160:begin
-      {make sure this is a 160x200 pic with 8-bit pixels (because it is
-      surprisingly difficult to save a 16-color picture as 4-bit with a
-      custom palette using modern tools -- I guess they all removed that
-      functionality}
-      if header2^.bitsPerPixel<>8
-        then fatalerr('Desired 160x200 bitmap uses '+inttostr(header2^.bitsPerPixel)+'-bit pixels; need 8-bit');
-      sl:=pointer(header2);
-      inc(word(sl),40); {skip second header}
-      inc(word(sl),header2^.numColors*4); {skip palette N entries in RGBA format}
-      destbank0:=nextFrame;
-      destbank1:=nextFrame;
-      destbank1:=addptr(destbank1,8192);
-      src_slwidth:=header2^.widthInPixels div (8 div header2^.bitsPerPixel);
-      dst_slwidth:=80;
-      destbank0:=addptr(destbank0,8000-dst_slwidth);
-      destbank1:=addptr(destbank1,8000-dst_slwidth);
-      for w:=0 to 100-1 do begin
-        {convert 8-bit values to 4-bit in-place}
-        move(sl^,sa,sizeof(sa));
-        for x:=0 to 80-1 do
-          da[x]:=(sa[x*2] shl 4) OR sa[(x*2)+1];
-        move(da,destbank1^,dst_slwidth);
-        sl:=addptr(sl,src_slwidth);
-        destbank1:=subptr(destbank1,dst_slwidth);
-
-        if header2^.heightInPixels>100 then begin
-          move(sl^,sa,sizeof(sa));
-          for x:=0 to 80-1 do
-            da[x]:=(sa[x*2] shl 4) OR sa[(x*2)+1];
-          move(da,destbank0^,dst_slwidth);
+          move(sl^,destbank0^,dst_slwidth);
           sl:=addptr(sl,src_slwidth);
           destbank0:=subptr(destbank0,dst_slwidth);
         end;
-      end;
-    end;
-    240:begin
-      {make sure this is a 240x128 pic with 1-bit pixels}
-      if header2^.bitsPerPixel<>1
-        then fatalerr('240x128 bitmap uses '+inttostr(header2^.bitsPerPixel)+'-bit pixels; need 1-bit');
-      if header2^.heightInPixels<>128
-        then fatalerr('240x bitmap has '+inttostr(header2^.heightInPixels)+' lines; need 128');
-      if header2^.rawsize<>4096
-        then fatalerr('Bitmap is too large for 95LX; size='+inttostr(header2^.rawsize));
-      sl:=pointer(header2);
-      inc(word(sl),40); {skip second header}
-      move(sl^,lp,4);
-      inc(word(sl),header2^.numColors*4); {skip palette N entries in RGBA format}
-      destbank0:=nextFrame;
-      src_slwidth:=32;
-      dst_slwidth:=screenbytewidth;
-      destbank0:=addptr(destbank0,3840-dst_slwidth);
-      for w:=0 to screenbyteheight-1 do begin
-        move(sl^,destbank0^,dst_slwidth);
-        sl:=addptr(sl,src_slwidth);
-        destbank0:=subptr(destbank0,dst_slwidth);
-      end;
-      if lp=0 then asm { LCD is the inverse of CRT }
-        les     di,nextFrame
-        mov     cx,screenRAMsize
-        shr     cx,1
-        push    ds
-        push    es
-        pop     ds
-        mov     si,di
+        {different programs create B&W files differently -- we are assuming
+        palette is 0,0,0 then 255,255,255.  If B&W palette is actually swapped,
+        swap the bits in the buffer:}
+        if lp<>0 then asm
+          les     di,nextFrame
+          mov     cx,screenRAMsize
+          shr     cx,1
+          push    ds
+          push    es
+          pop     ds
+          mov     si,di
 
-      @loopit:
-        lodsw
-        xor     ax,$FFFF
-        stosw
-        loop    @loopit
+        @loopit:
+          lodsw
+          xor     ax,$FFFF
+          stosw
+          loop    @loopit
 
-        pop     ds
+          pop     ds
+        end;
       end;
+      160:begin
+        {make sure this is a 160x200 pic with 8-bit pixels (because it is
+        surprisingly difficult to save a 16-color picture as 4-bit with a
+        custom palette using modern tools -- I guess they all removed that
+        functionality}
+        if header2^.bitsPerPixel<>8
+          then fatalerr('Desired 160x200 bitmap uses '+inttostr(header2^.bitsPerPixel)+'-bit pixels; need 8-bit');
+        sl:=pointer(header2);
+        inc(word(sl),40); {skip second header}
+        inc(word(sl),header2^.numColors*4); {skip palette N entries in RGBA format}
+        destbank0:=nextFrame;
+        destbank1:=nextFrame;
+        destbank1:=addptr(destbank1,8192);
+        src_slwidth:=header2^.widthInPixels div (8 div header2^.bitsPerPixel);
+        dst_slwidth:=80;
+        destbank0:=addptr(destbank0,8000-dst_slwidth);
+        destbank1:=addptr(destbank1,8000-dst_slwidth);
+        for w:=0 to 100-1 do begin
+          {convert 8-bit values to 4-bit in-place}
+          move(sl^,sa,sizeof(sa));
+          for x:=0 to 80-1 do
+            da[x]:=(sa[x*2] shl 4) OR sa[(x*2)+1];
+          move(da,destbank1^,dst_slwidth);
+          sl:=addptr(sl,src_slwidth);
+          destbank1:=subptr(destbank1,dst_slwidth);
+
+          if header2^.heightInPixels>100 then begin
+            move(sl^,sa,sizeof(sa));
+            for x:=0 to 80-1 do
+              da[x]:=(sa[x*2] shl 4) OR sa[(x*2)+1];
+            move(da,destbank0^,dst_slwidth);
+            sl:=addptr(sl,src_slwidth);
+            destbank0:=subptr(destbank0,dst_slwidth);
+          end;
+        end;
+      end;
+      240:begin
+        {make sure this is a 240x128 pic with 1-bit pixels}
+        if header2^.bitsPerPixel<>1
+          then fatalerr('240x128 bitmap uses '+inttostr(header2^.bitsPerPixel)+'-bit pixels; need 1-bit');
+        if header2^.heightInPixels<>128
+          then fatalerr('240x bitmap has '+inttostr(header2^.heightInPixels)+' lines; need 128');
+        if header2^.rawsize<>4096
+          then fatalerr('Bitmap is too large for 95LX; size='+inttostr(header2^.rawsize));
+        sl:=pointer(header2);
+        inc(word(sl),40); {skip second header}
+        move(sl^,lp,4);
+        inc(word(sl),header2^.numColors*4); {skip palette N entries in RGBA format}
+        destbank0:=nextFrame;
+        src_slwidth:=32;
+        dst_slwidth:=screenbytewidth;
+        destbank0:=addptr(destbank0,3840-dst_slwidth);
+        for w:=0 to screenbyteheight-1 do begin
+          move(sl^,destbank0^,dst_slwidth);
+          sl:=addptr(sl,src_slwidth);
+          destbank0:=subptr(destbank0,dst_slwidth);
+        end;
+        if lp=0 then asm { LCD is the inverse of CRT }
+          les     di,nextFrame
+          mov     cx,screenRAMsize
+          shr     cx,1
+          push    ds
+          push    es
+          pop     ds
+          mov     si,di
+
+        @loopit:
+          lodsw
+          xor     ax,$FFFF
+          stosw
+          loop    @loopit
+
+          pop     ds
+        end;
+      end;
+    else
+      fatalerr('Not a resolution we handle (yet)');
     end;
-  else
-    fatalerr('Not a resolution we handle (yet)');
+
   end;
   {if debug>0 then move(nextframe^,cgaram^,screenRAMsize);}
   freemem(picbuf,fs);
