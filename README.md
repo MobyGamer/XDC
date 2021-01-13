@@ -17,4 +17,4 @@ virtual session (ie. Windows XP in VirtualBox) without any trouble, albeit with
 some DOS-era limitations such as required 8.3 filenames.
 
 Compiling the code as-is requires Turbo Pascal 7.0 as well as some files from
-my UNITS github repository.
+MobyGamer/TPLibs and MobyGamer/UNITS.
