@@ -3,11 +3,12 @@
 
 {{$DEFINE DEBUG}
 
+{{$DEFINE HP95LX} {Undefine to add support for an HP95LX}
+
 {todo:
 -- add left/right skip by +/- 5 secs, 1 minute, 5 minutes
   - flash screen to register keypress? or just key click?
   also add spacebar for pause/play
-
 }
 
 
@@ -69,33 +70,35 @@ begin
   inc(cpuUsageTicks);
 end;
 
+{$IFDEF HP95LX}
 procedure userTickHandler95LX; interrupt;
 begin
   inc(cpuUsageTicks);
   play.callproc;
 end;
+{$ENDIF}
 
 Procedure PrintHelp;
 begin
   asm
-    push ds
-    jmp @start
+        push    ds
+        jmp     @start
 @message:
-    db 'Usage:  xdc_play <switches> [filename] <switches>',0dh,0ah
-    db '  <filename> is the video to play',0dh,0ah
-    db '  /? or /h   This help',0dh,0ah
-    db '  /q         Quiet -- do not attempt to use a sound card',0dh,0ah
-    db '  /kN        How much KB to read in a single operation',0dh,0ah
-    db '  /p         Presentation mode (no messages, stay in graphics mode)',0dh,0ah
-    db '  /d         Displays queue depth indicator',0dh,0ah
-    db '$'
+        db 'Usage:  xdc_play <switches> [filename] <switches>',0dh,0ah
+        db '  <filename> is the video to play',0dh,0ah
+        db '  /? or /h   This help',0dh,0ah
+        db '  /q         Quiet -- do not attempt to use a sound card',0dh,0ah
+        db '  /kN        How much KB to read in a single operation',0dh,0ah
+        db '  /p         Presentation mode (no messages, stay in graphics mode)',0dh,0ah
+        db '  /d         Displays queue depth indicator',0dh,0ah
+        db '$'
 @start:
-    mov ax,0900h
-    lea dx,@message
-    mov bx,cs
-    mov ds,bx
-    int 21h
-    pop ds
+        mov     ax,0900h
+        lea     dx,@message
+        mov     bx,cs
+        mov     ds,bx
+        int     21h
+        pop     ds
   end;
   halt(255);
 end;
@@ -141,7 +144,7 @@ begin
   l:=cpuUsageTicks;
   repeat
     asm
-      hlt
+        hlt
     end
   until l<>cpuUsageTicks; {wait until beginning of tick}
   l:=cpuUsageTicks;
@@ -198,14 +201,14 @@ begin
 {$IFNDEF HP95LX}
   {if requested, display a blinking pip onscreen showing queue depth}
   if showpip then asm
-    mov     ax,$b800
-    mov     es,ax
-    mov     di,AVRing.numElements
-    mov     cl,3
-    shr     di,cl
-    mov     ax,di
-    or      ax,1000000000000001b
-    stosw
+        mov     ax,$b800
+        mov     es,ax
+        mov     di,AVRing.numElements
+        mov     cl,3
+        shr     di,cl
+        mov     ax,di
+        or      ax,1000000000000001b
+        stosw
   end;
 {$ENDIF}
   if AVRing.isEmpty then begin
@@ -220,33 +223,34 @@ begin
       audioHp:=frameHp;
       inc(word(audioHp),(packetIndex^[curPlayPacket]*512)-header.achunksize);
       asm
-        mov  dx,ds
-        les  di,sndbufp
+        mov     dx,ds
+        les     di,sndbufp
         cld
-        mov  cx,header.achunksize
-        lds  si,audioHp {don't need vars from DS any more so this is fine}
-        rep  movsb
-        mov  ds,dx
+        mov     cx,header.achunksize
+        lds     si,audioHp {don't need vars from DS any more so this is fine}
+        rep     movsb
+        mov     ds,dx
       end;
     end;
     {execute code in video portion of packet.  Normalized pointers allow:}
     asm
-      call framehp
-      inc curPlayPacket
+        xor     cx,cx           {Compiler output does not clear CH, so we must}
+        call    framehp
+        inc     curPlayPacket
     end;
   {if we are NOT allowed to pull AV from the FIFO queue:}
   end else if not quiet then begin
     asm
-      les  di,sndbufp
-      cld
-      mov  cx,header.achunksize
-      mov  al,$7f   {fill buffer with silence if we have nothing to put in it}
-      rep  stosb
+        les     di,sndbufp
+        cld
+        mov     cx,header.achunksize
+        mov     al,$7f   {fill buffer with silence if we have nothing to put in it}
+        rep     stosb
     end;
   end;
   {toggle sound double-buffer blocks}
   asm
-    xor play.activeblock,00000011b {toggles between 1 and 2}
+        xor     play.activeblock,00000011b {toggles between 1 and 2}
   end;
 end;
 
@@ -265,8 +269,16 @@ begin
   minDiskRead:=minDiskRead*1024; {convert KB to bytes outside of inner loop}
   {clear fat-finger typing so player doesn't immediately exit}
   if keypressed then repeat readkeychar until not keypressed;
-  {must be atomic; 32-bit, 2 instructions, so we wrap it}
-  asm pushf; cli end; cpuUsageTicks:=0; asm popf end; cpuUsageCounter:=0;
+  {must be atomic; 32-bit integer, 2 instructions to zero it, so we wrap it}
+  asm
+        pushf
+        cli
+  end;
+  cpuUsageTicks:=0;
+  asm
+        popf
+  end;
+  cpuUsageCounter:=0;
   with AVRing do begin
     repeat
       if not isFull then begin {if we have space for video+audio data and some extra for handle}
@@ -362,18 +374,19 @@ begin
 end;
 {$F-}
 
-procedure primeNoCard; {silence!  We will use the system timer!}
+procedure primeNoCard; {Instead of sound blaster, we will use the system timer}
 begin
-  if intfps<20 then intfps:=20; {timer can only go as low as 18.2}
   play.callproc := soundIntCallerCGA;
-  SetTimerHz(@noSoundIntCaller, intfps); {set to fire at video's rough framerate}
+  SetTimerExact(@noSoundIntCaller,trunc(PITFreq/realfps)); {set to fire at video's framerate}
 end;
 
+{$IFDEF HP95LX}
 procedure primeNoCard95LX;
 begin
   play.callproc := soundIntCallerCGA;
   SetIntVec($1C,@userTickHandler95LX);
 end;
+{$ENDIF}
 
 Procedure shutItDown;
 begin
@@ -390,27 +403,27 @@ begin
   if not presenting then begin
     asm
 {$IFDEF HP95LX}
-      mov ax,7
+        mov     ax,7
 {$ELSE}
-      mov ax,3
+        mov     ax,3
 {$ENDIF}
-      int 10h
+        int     10h
     end;
     asm
-      push ds
-      jmp @start
-    @message:
-      db 'XDC Player v0.1, 20140520',0dh,0ah
-      db 'All design and code by Trixter / Hornet',0dh,0ah
-      db 'Sound Blaster shell (SB "2.01" ;-) by Stefan Goehler',0dh,0ah
-      db '$'
-    @start:
-      mov ax,0900h
-      lea dx,@message
-      mov bx,cs
-      mov ds,bx
-      int 21h
-      pop ds
+        push    ds
+        jmp     @start
+@message:
+        db 'XDC Player v0.1, 20140520',0dh,0ah
+        db 'All design and code by Trixter / Hornet',0dh,0ah
+        db 'Sound Blaster shell (SB "2.01" ;-) by Stefan Goehler',0dh,0ah
+        db '$'
+@start:
+        mov     ax,0900h
+        lea     dx,@message
+        mov     bx,cs
+        mov     ds,bx
+        int     21h
+        pop     ds
     end;
     writeln('Playback statistics:');
     writeln('# of pauses during playback: ',numPauses);
